@@ -1,0 +1,66 @@
+@startuml indexing-workflow
+!include jb-plantuml-theme.puml
+
+title File Indexing Workflow
+
+skinparam activity {
+  BackgroundColor<<Decision>> #Yellow
+  BorderColor<<Decision>> #Black
+}
+
+start
+
+:Project Opened;
+
+:UnindexedFilesScanner\nScans project files;
+
+:Collect files needing\nindexing;
+
+fork
+  :File 1;
+fork again
+  :File 2;
+fork again
+  :File 3;
+fork again
+  :File N;
+end fork
+
+:Load file content;
+
+:For each registered index;
+
+if (InputFilter accepts file?) then (yes)
+  :Call DataIndexer.map()\nto extract key-values;
+  
+  if (File previously indexed?) then (yes)
+    :Read old data from\nforward index;
+    
+    :Calculate diff:\n- Removed keys\n- Added keys\n- Updated keys;
+    
+    :Update inverted index:\nRemove old keys\nAdd new keys\nUpdate changed keys;
+    
+  else (no - first time)
+    :Add all keys to\ninverted index;
+  endif
+  
+  :Update forward index\nwith new data;
+  
+  :Update IndexingStamp;
+  
+else (no)
+  :Skip this index;
+endif
+
+:All indexes processed;
+
+fork again
+fork again
+fork again
+end fork
+
+:Update complete;
+
+stop
+
+@enduml
