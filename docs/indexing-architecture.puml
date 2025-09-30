@@ -1,0 +1,130 @@
+@startuml indexing-architecture
+!include jb-plantuml-theme.puml
+
+title IntelliJ IDEA Indexing Architecture
+
+skinparam componentStyle uml2
+
+package "Client Code" {
+  [IDE Features] as features
+  [Find Usages] as find
+  [Code Completion] as completion
+  [Navigation] as navigation
+  [Search] as search
+}
+
+package "FileBasedIndex Service Layer" {
+  [FileBasedIndex\n(API)] as api
+  [FileBasedIndexImpl\n(Implementation)] as impl
+}
+
+package "Index Registry" {
+  [RegisteredIndexes] as registry
+  [Index Configuration] as config
+  [Version Manager] as version
+}
+
+package "Built-in Indexes" {
+  [StubUpdatingIndex\n(PSI Structure)] as stub
+  [IdIndex\n(Identifiers)] as id
+  [FileNameIndex\n(File Names)] as filename
+  [TodoIndex\n(TODO Comments)] as todo
+  [FileTypeIndex\n(File Types)] as filetype
+}
+
+package "Index Storage Layer" {
+  database "Inverted Index\n(Key → File IDs)" as inverted
+  database "Forward Index\n(File ID → Data)" as forward
+  database "IndexingStamp\n(Version Info)" as stamp
+  [PersistentHashMap] as phm
+}
+
+package "File Processing Pipeline" {
+  [UnindexedFilesScanner] as scanner
+  [UnindexedFilesIndexer] as indexer
+  [ChangedFilesCollector] as collector
+}
+
+package "VFS & PSI" {
+  [VirtualFileSystem] as vfs
+  [PSI Manager] as psi
+}
+
+' Connections
+features --> api : query indexes
+find --> api
+completion --> api
+navigation --> api
+search --> api
+
+api --> impl : delegates to
+
+impl --> registry : manages
+impl --> scanner : triggers
+impl --> collector : listens to
+
+registry --> config
+registry --> version
+registry --> stub
+registry --> id
+registry --> filename
+registry --> todo
+registry --> filetype
+
+stub --> inverted : reads/writes
+stub --> forward : reads/writes
+stub --> stamp : updates
+id --> inverted
+id --> forward
+filename --> inverted
+todo --> inverted
+filetype --> inverted
+
+inverted --> phm : persisted via
+forward --> phm
+stamp --> phm
+
+scanner --> vfs : scans files
+indexer --> vfs : reads content
+indexer --> psi : parses files
+collector --> vfs : listens to changes
+
+indexer --> stub : indexes file
+indexer --> id
+indexer --> filename
+indexer --> todo
+indexer --> filetype
+
+note right of api
+  Main service for
+  querying indexes
+  
+  Key methods:
+  - getContainingFiles()
+  - getValues()
+  - processAllKeys()
+end note
+
+note right of stub
+  Most important index
+  
+  Stores lightweight
+  AST (stub trees)
+  for fast PSI access
+end note
+
+note right of inverted
+  Key → File IDs mapping
+  
+  Example:
+  "myMethod" → {file1, file3, file5}
+end note
+
+note right of forward
+  File ID → Data mapping
+  
+  Enables efficient
+  incremental updates
+end note
+
+@enduml

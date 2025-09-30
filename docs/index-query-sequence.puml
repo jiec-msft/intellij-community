@@ -1,0 +1,72 @@
+@startuml index-query-sequence
+!include jb-plantuml-theme.puml
+
+title Index Query Sequence
+
+actor "Client Code" as client
+participant "FileBasedIndex" as fbi
+participant "FileBasedIndexImpl" as impl
+participant "RegisteredIndexes" as registry
+participant "MapReduceIndex" as index
+participant "IndexStorage" as storage
+participant "ValueContainer" as container
+
+client -> fbi: getContainingFiles(indexId, key, scope)
+activate fbi
+
+fbi -> impl: ensureUpToDate(indexId, project, scope)
+activate impl
+
+alt Index needs update
+  impl -> impl: Update index\n(if few files)
+  impl --> fbi: Index updated
+else Index is up-to-date
+  impl --> fbi: Already current
+end
+
+deactivate impl
+
+fbi -> impl: Acquire read lock
+activate impl
+
+impl -> registry: getIndex(indexId)
+activate registry
+registry --> impl: Return index instance
+deactivate registry
+
+impl -> index: withData(key, processor)
+activate index
+
+index -> storage: read(key)
+activate storage
+
+storage --> index: ValueContainer
+deactivate storage
+
+index -> container: forEach((fileId, value) -> ...)
+activate container
+
+loop For each (fileId, value)
+  alt scope.contains(fileId)
+    container -> index: processor.process(fileId, value)
+    index --> container: continue/stop
+  end
+end
+
+container --> index: All processed
+deactivate container
+
+index --> impl: Results collected
+deactivate index
+
+impl -> impl: Convert file IDs\nto VirtualFiles
+
+impl --> fbi: Collection<VirtualFile>
+
+impl -> impl: Release read lock
+deactivate impl
+
+fbi --> client: Return results
+deactivate fbi
+
+@enduml
